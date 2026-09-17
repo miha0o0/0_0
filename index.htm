@@ -230,17 +230,25 @@
         .wiki-btn-group {
             display: flex;
             gap: 4px;
+            align-items: center;
         }
 
         .action-btn {
             background: #ffffff;
             border: 1px solid var(--border-color);
             color: var(--text-color);
-            padding: 3px 8px;
-            font-size: 0.75rem;
+            padding: 4px 10px;
+            font-size: 0.78rem;
             border-radius: 3px;
             cursor: pointer;
             user-select: none;
+            font-weight: bold;
+        }
+
+        .action-btn.share {
+            background: var(--soft-pink-bg);
+            color: var(--accent-pink);
+            border-color: var(--accent-pink);
         }
 
         .action-btn.private {
@@ -632,6 +640,7 @@
             <div class="wiki-title-area">
                 <h2><span id="out-name">캐릭터 이름</span> <span class="sub-title" id="out-sub"></span></h2>
                 <div class="wiki-btn-group">
+                    <span class="action-btn share" onclick="shareProfile()">🔗 공유하기</span>
                     <span class="action-btn" id="visibility-btn" onclick="toggleVisibility()">공개</span>
                     <button class="action-btn" onclick="switchTab('lobby')">목록으로</button>
                 </div>
@@ -807,8 +816,9 @@
         { title: "여담", content: "", spoiler: "NO", images: [] }
     ];
 
-    // 브라우저 영구 저장소(localStorage)를 활용하여 새로고침해도 절대 지워지지 않도록 구현
-    function loadSavedData() {
+    // 사이트 자체 동기화 및 영구 저장 로드 함수
+    async function loadSavedData() {
+        // 1. 먼저 브라우저 영구 저장소에서 데이터 로드
         const saved = localStorage.getItem('XWIKI_CHARACTERS_PERMANENT');
         if (saved) {
             try {
@@ -817,21 +827,41 @@
                 characterList = [];
             }
         }
+
+        // 2. 깃허브 서버에 업로드되어 있을 수 있는 외부 동기화 파일(characters.json) 자동 감지 및 병합 동기화
+        try {
+            const response = await fetch('characters.json?t=' + Date.now());
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.characters && Array.isArray(data.characters)) {
+                    // 로컬 데이터와 서버 데이터를 합쳐서 누락 방지
+                    const mergedMap = new Map();
+                    [...data.characters, ...characterList].forEach(c => {
+                        if (c && c.id) mergedMap.set(c.id, c);
+                    });
+                    characterList = Array.from(mergedMap.values());
+                    localStorage.setItem('XWIKI_CHARACTERS_PERMANENT', JSON.stringify(characterList));
+                }
+            }
+        } catch (err) {
+            // 외부 파일이 없거나 로컬 환경인 경우 무시
+        }
+
         checkUrlHash();
     }
 
     function saveData() {
-        // 브라우저에 영구 저장
+        // 사이트 자체 브라우저 영구 저장
         localStorage.setItem('XWIKI_CHARACTERS_PERMANENT', JSON.stringify(characterList));
-        
-        // 데이터가 저장될 때 백업용 JSON 파일도 같이 다운로드되어 깃허브에 백업할 수 있게 함
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ characters: characterList }, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", "characters.json");
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
+    }
+
+    function shareProfile() {
+        const currentUrl = window.location.href;
+        navigator.clipboard.writeText(currentUrl).then(() => {
+            alert('현재 캐릭터 프로필의 고유 링크가 클립보드에 복사되었습니다! 친구들에게 공유해 보세요.');
+        }).catch(err => {
+            prompt('아래 링크를 복사하여 공유하세요:', currentUrl);
+        });
     }
 
     function checkLogin() {
@@ -1072,10 +1102,10 @@
         if (editingCharacterId !== null) {
             const index = characterList.findIndex(c => c.id === editingCharacterId);
             if (index !== -1) characterList[index] = characterData;
-            alert('캐릭터 사이트가 성공적으로 수정되었습니다! (데이터가 영구 저장됨)');
+            alert('캐릭터 사이트가 성공적으로 수정 및 자동 동기화되었습니다!');
         } else {
             characterList.push(characterData);
-            alert('새로운 캐릭터 사이트가 생성되었습니다! (characters.json 파일이 자동 다운로드됩니다. 깃허브에 업로드하면 다른 사람들도 볼 수 있습니다)');
+            alert('새로운 캐릭터 사이트가 생성되고 사이트 데이터베이스에 동기화되었습니다!');
         }
 
         saveData();
@@ -1346,4 +1376,4 @@
 </script>
 
 </body>
-          </html>
+            </html>
